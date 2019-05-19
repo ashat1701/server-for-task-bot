@@ -1,25 +1,35 @@
-from flask import Flask, render_template, request, url_for, redirect
-from werkzeug.contrib.fixers import ProxyFix
+import logging
+import os
+
 import google_auth_oauthlib.flow
 import psycopg2
-import os
+from flask import Flask, render_template, request, url_for, redirect
+from werkzeug.contrib.fixers import ProxyFix
+
 app = Flask(__name__)
 conn = None
+
 
 def init():
     app.wsgi_app = ProxyFix(app.wsgi_app)
     DATABASE_URL = os.environ['DATABASE_URL']
+    SECRET_TOKEN = os.environ['SECRET_TOKEN']
+    with open("client_secret.json", "w") as f:
+        print(SECRET_TOKEN, file=f)
     global conn
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    except ConnectionError:
+        logging.error("No connection to database")
 
 
 def credentials_to_dict(credentials):
     return {'token': credentials.token,
-          'refresh_token': credentials.refresh_token,
-          'token_uri': credentials.token_uri,
-          'client_id': credentials.client_id,
-          'client_secret': credentials.client_secret,
-          'scopes': credentials.scopes}
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes}
 
 
 @app.route('/login')
@@ -33,8 +43,10 @@ def get_login_hook():
     credentials = flow.credentials
     to_send = credentials_to_dict(credentials)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO auth (chat_id, token, refresh_token, token_uri, client_id, client_secret, scopes) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (str(chat_id), str(to_send["token"]), str(to_send["refresh_token"]), str(to_send["token_uri"]), str(to_send["client_id"]), str(to_send["client_secret"]), str(to_send["scopes"])))
+    cursor.execute(
+        "INSERT INTO auth (chat_id, token, refresh_token, token_uri, client_id, client_secret, scopes) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (str(chat_id), str(to_send["token"]), str(to_send["refresh_token"]), str(to_send["token_uri"]),
+         str(to_send["client_id"]), str(to_send["client_secret"]), str(to_send["scopes"])))
     conn.commit()
     cursor.close()
     return redirect("https://telegram.me/yet_another_task_bot?start={}".format(str(chat_id)))
@@ -48,9 +60,6 @@ def index():
 @app.route('/googleb6f1161798ffa448.html')
 def google_handler():
     return render_template("googleb6f1161798ffa448.html")
-
-
-init()
 
 
 if __name__ == "__main__":
